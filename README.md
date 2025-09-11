@@ -39,10 +39,10 @@ By clicking the following button, you will clone a repo from here and deploy you
     npm install
     ```
 
-3. Export your Grok/OpenAI API Key using this command
+3. Export your Google AI Studio (Gemini) API key (used for all routes via the OpenAI-compatible endpoint)
 
     ```bash
-    export XAI_API_KEY=YOUR_API_KEY
+    export GEMINI_API_KEY=YOUR_GOOGLE_AI_STUDIO_KEY
     ```
 
 4. Run `npm build && npm start` to start the server

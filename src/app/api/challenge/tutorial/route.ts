@@ -3,6 +3,13 @@ import OpenAI from "openai";
 
 export async function POST(req: NextRequest) {
     const body = await req.json();
+    const reqId = Math.random().toString(36).slice(2, 10);
+    const startTs = Date.now();
+    console.log(`[tutorial][${reqId}] POST /api/challenge/tutorial start`);
+    console.log(
+        `[tutorial][${reqId}] parsed body: inputLen=%d`,
+        (body?.input ?? "").length,
+    );
 
     // Create a TransformStream for streaming the response
     const encoder = new TextEncoder();
@@ -13,13 +20,35 @@ export async function POST(req: NextRequest) {
     // Start streaming response
     const streamResponse = async () => {
         try {
+            const googleApiKey = process.env.GEMINI_API_KEY;
+            if (!googleApiKey) {
+                console.error(`[tutorial][${reqId}] missing GEMINI_API_KEY`);
+                await writer.write(
+                    encoder.encode(
+                        `data: ${JSON.stringify({
+                            error: "Server misconfiguration: missing GEMINI_API_KEY",
+                        })}\n\n`,
+                    ),
+                );
+                await writer.write(encoder.encode("data: [DONE]\n\n"));
+                await writer.close();
+                return;
+            }
+
             const client = new OpenAI({
-                apiKey: process.env.XAI_API_KEY,
-                baseURL: "https://api.x.ai/v1",
+                apiKey: googleApiKey,
+                baseURL:
+                    "https://generativelanguage.googleapis.com/v1beta/openai",
+                defaultHeaders: { "x-goog-api-key": googleApiKey },
             });
+            console.log(
+                `[tutorial][${reqId}] OpenAI client ready (compat). model=%s`,
+                "gemini-1.5-flash",
+            );
 
             const completion = await client.chat.completions.create({
-                model: "grok-2-latest",
+                // Use Gemini model directly via Google's OpenAI-compatible API
+                model: "gemini-1.5-flash",
                 messages: [
                     {
                         role: "system",
@@ -54,9 +83,21 @@ Ensure that the entire tutorial remains interactive, engaging, and thought-provo
             });
 
             // Process the streaming response
+            let chunks = 0;
+            let totalChars = 0;
             for await (const chunk of completion) {
                 const content = chunk.choices[0]?.delta?.content || "";
                 if (content) {
+                    chunks++;
+                    totalChars += content.length;
+                    if (chunks <= 2 || chunks % 25 === 0) {
+                        console.log(
+                            `[tutorial][${reqId}] stream chunk #%d len=%d totalChars=%d`,
+                            chunks,
+                            content.length,
+                            totalChars,
+                        );
+                    }
                     await writer.write(
                         encoder.encode(
                             `data: ${JSON.stringify({ content })}\n\n`,
@@ -67,14 +108,46 @@ Ensure that the entire tutorial remains interactive, engaging, and thought-provo
 
             await writer.write(encoder.encode("data: [DONE]\n\n"));
             await writer.close();
+            console.log(
+                `[tutorial][${reqId}] stream finished after %d chunks, %d chars, %dms`,
+                chunks,
+                totalChars,
+                Date.now() - startTs,
+            );
         } catch (error) {
+            const err: any = error;
+            console.error(
+                `[tutorial][${reqId}] error: name=%s code=%s status=%s respStatus=%s msg=%s`,
+                err?.name,
+                err?.code,
+                err?.status,
+                err?.response?.status,
+                err?.message,
+            );
+            if (err?.response?.data) {
+                try {
+                    console.error(
+                        `[tutorial][${reqId}] error response data: %s`,
+                        JSON.stringify(err.response.data),
+                    );
+                } catch (_) {
+                    console.error(
+                        `[tutorial][${reqId}] error response data (non-JSON)`,
+                    );
+                }
+            }
             const errorMessage = (error as Error).message;
             await writer.write(
                 encoder.encode(
                     `data: ${JSON.stringify({ error: errorMessage })}\n\n`,
                 ),
             );
+            await writer.write(encoder.encode("data: [DONE]\n\n"));
             await writer.close();
+            console.log(
+                `[tutorial][${reqId}] error streamed to client, %dms`,
+                Date.now() - startTs,
+            );
         }
     };
 
