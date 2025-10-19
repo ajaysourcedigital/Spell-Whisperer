@@ -95,13 +95,13 @@ export async function POST(req: NextRequest) {
             });
             console.log(
                 `[chat][${reqId}] OpenAI client ready (compat). model=%s`,
-                "gemini-1.5-flash",
+                "gemini-2.0-flash-lite",
             );
 
             // Create streaming completion
             const completion = await client.chat.completions.create({
-                // Use Gemini model directly via Google's OpenAI-compatible API
-                model: "gemini-1.5-flash",
+                // Use Google AI Studio's OpenAI-compatible alias for Gemini 1.5 Flash
+                model: "gemini-2.0-flash-lite",
                 messages: [
                     {
                         role: "system",
@@ -157,6 +157,11 @@ export async function POST(req: NextRequest) {
                 err?.response?.status,
                 err?.message,
             );
+            if (err?.response?.status === 404) {
+                console.error(
+                    `[chat][${reqId}] Hint: 404 from compat endpoint. Verify baseURL=https://generativelanguage.googleapis.com/v1beta/openai and model=gpt-4o-mini`,
+                );
+            }
             if (err?.response?.data) {
                 try {
                     console.error(
